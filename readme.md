@@ -4,7 +4,13 @@ MyInjector is a dll injection tool, to force a program to load your dll module.
 
 ![image](https://user-images.githubusercontent.com/90182934/148061599-d7604c54-ccf7-49c8-9383-f427da3c6ea5.png)
 
-The UI should be quite self-explainary. Also, you can select your injection target process by "drag and drop" a finder to the target's windows, just like the following
+The UI should be quite self-explainary. You can select your injection target process by "drag and drop" a finder to the target's windows, just like the following
+
+![e6ZJ54ByN4](https://user-images.githubusercontent.com/90182934/148766791-173f7c3a-9b86-411d-9564-b56b94f79d55.gif)
+
+Then you select the injection method and click 'confirm'
+
+![z2Lio6Wwja](https://user-images.githubusercontent.com/90182934/148767329-e145e744-6b81-4301-832d-1770f0fbf3df.gif)
 
 ## Implemented Injection Methods
 
