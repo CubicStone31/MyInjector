@@ -36,7 +36,7 @@ You can combine these injection "parts" to build your own injection methods.
 
 Currrently, a few injection options listed in the software's UI are still under constrcution. However, they should be implemeted in the near future.
 
-When using kernel mode injection methods, your should load my kernel assistance module, which is another project of mine, KernelCorridor(https://github.com/CubicStone31/KernelCorridor).
+To use kernel mode injection methods, you should place *KernelCorridor.sys* under this tool's directory'. *KernelCorridor.sys* can be found at here(https://github.com/CubicStone31/KernelCorridor).
 
 ## Why another dll injector?
 
