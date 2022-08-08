@@ -173,4 +173,168 @@ namespace Common
         return mainModule.parent_path();
     }
 
+    class ServiceHolder
+    {
+    public:
+        inline ServiceHolder(SC_HANDLE handle)
+        {
+            this->handle = handle;
+        }
+
+        inline ~ServiceHolder()
+        {
+            CloseServiceHandle(handle);
+        }
+    private:
+        SC_HANDLE handle;
+    };
+
+    inline void StopDriver(const wchar_t* lpszDriverName)
+    {
+        auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+        if (NULL == serviceMgr)
+        {
+            ThrowException("OpenSCManagerW() failed with last error %d.", GetLastError());
+        }
+        ServiceHolder holder1(serviceMgr);
+        auto service = OpenServiceW(serviceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
+        if (NULL == service)
+        {
+            return;
+        }
+        ServiceHolder holder2(service);
+        SERVICE_STATUS_PROCESS status = {};
+        DWORD bytesNeeded = 0;
+        if (!QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO, (BYTE*)&status, sizeof(status), &bytesNeeded))
+        {
+            ThrowException("QueryServiceStatusEx() failed with last error %d.", GetLastError());
+        }
+        if (status.dwCurrentState == SERVICE_STOPPED)
+        {
+            return;
+        }
+        SERVICE_STATUS svcStatus = {};
+        if (!ControlService(service, SERVICE_CONTROL_STOP, &svcStatus))
+        {
+            ThrowException("ControlService() failed with last error %d.", GetLastError());
+        }
+        if (svcStatus.dwCurrentState != SERVICE_STOPPED)
+        {
+            ThrowException("Target service is not stopped.");
+        }
+    }
+
+    inline void DeleteDriverService(const wchar_t* lpszDriverName)
+    {
+        auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+        if (NULL == serviceMgr)
+        {
+            ThrowException("OpenSCManagerW() failed with last error %d.", GetLastError());
+        }
+        ServiceHolder holder1(serviceMgr);
+        auto service = OpenServiceW(serviceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
+        if (NULL == service)
+        {
+            return;
+        }
+        ServiceHolder holder2(service);
+        SERVICE_STATUS_PROCESS status = {};
+        DWORD bytesNeeded = 0;
+        if (!QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO, (BYTE*)&status, sizeof(status), &bytesNeeded))
+        {
+            ThrowException("QueryServiceStatusEx() failed with last error %d.", GetLastError());
+        }
+        if (status.dwCurrentState != SERVICE_STOPPED)
+        {
+            ThrowException("Target service is still running.");
+        }
+        if (!DeleteService(service))
+        {
+            ThrowException("DeleteService() failed with last error %d.", GetLastError());
+        }
+        return;
+    }
+
+    inline void InstallDriver(const wchar_t* lpszDriverName, const wchar_t* lpszDriverPath)
+    {
+        //wchar_t szDriverImagePath[MAX_PATH];
+        //GetFullPathNameW(lpszDriverPath, MAX_PATH, szDriverImagePath, NULL);
+
+        auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+        if (serviceMgr == NULL)
+        {
+            ThrowException("OpenSCManagerW() failed with last error %d.", GetLastError());
+        }
+        auto service = CreateServiceW(serviceMgr,
+            lpszDriverName, 
+            lpszDriverName, 
+            SERVICE_ALL_ACCESS, 
+            SERVICE_KERNEL_DRIVER, 
+            SERVICE_DEMAND_START,
+            SERVICE_ERROR_IGNORE,
+            lpszDriverPath,
+            0,
+            NULL,
+            0, 
+            NULL,
+            NULL);
+        if (service != NULL)
+        {
+            CloseServiceHandle(service);
+            CloseServiceHandle(serviceMgr);
+            return;
+        }
+        else
+        {
+            auto error = GetLastError();           
+            if (error != ERROR_SERVICE_EXISTS)
+            {
+                CloseServiceHandle(serviceMgr);
+                ThrowException("CreateServiceW() failed with last error %d.", GetLastError());
+            }
+            else
+            {
+                StopDriver(lpszDriverName);
+                // set executable path
+                auto service = OpenServiceW(serviceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
+                if (NULL == service)
+                {
+                    auto error = GetLastError();
+                    CloseServiceHandle(serviceMgr);
+                    ThrowException("OpenService() failed with %d.", error);
+                }
+                if (!ChangeServiceConfigW(service, SERVICE_NO_CHANGE, SERVICE_NO_CHANGE, SERVICE_NO_CHANGE, lpszDriverPath, 0, 0, 0, 0, 0, 0))
+                {
+                    auto error = GetLastError();
+                    CloseServiceHandle(service);
+                    CloseServiceHandle(serviceMgr);
+                    ThrowException("OpenService() failed with %d.", error);
+                }
+                CloseServiceHandle(service);
+                CloseServiceHandle(serviceMgr);
+                return;
+            }
+        }
+    }
+
+    inline void StartDriver(const wchar_t* lpszDriverName)
+    {
+        auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+        if (NULL == serviceMgr)
+        {
+            ThrowException("OpenSCManager() failed with %d.", GetLastError());
+        }
+        ServiceHolder holder1(serviceMgr);
+        auto service = OpenServiceW(serviceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
+        if (NULL == service)
+        {
+            ThrowException("OpenService() failed with %d.", GetLastError());
+        }
+        ServiceHolder holder2(service);
+        if (!StartServiceW(service, 0, NULL))
+        {
+            ThrowException("StartServiceW() failed with %d.", GetLastError());
+        }
+        return;
+    }
 }

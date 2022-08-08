@@ -1,6 +1,22 @@
 #include "KernelAccess.h"
 #include "../Common.h"
 
+bool KernelAccess::IsKernelModuleReady()
+{
+    auto tmp = CreateFileW(KC_SYMBOLIC_NAME, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if (INVALID_HANDLE_VALUE == tmp)
+    {
+        return false;
+    }
+    ::CloseHandle(tmp);
+    return true;
+}
+
+const wchar_t* KernelAccess::GetKernelModuleSymbolicName()
+{
+    return KC_SYMBOLIC_NAME;
+}
+
 KernelAccess::KernelAccess()
 {
     driverHandle = CreateFileW(KC_SYMBOLIC_NAME, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);

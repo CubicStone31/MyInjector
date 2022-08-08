@@ -7,10 +7,13 @@
 #include <winternl.h>
 #include <tlhelp32.h>
 #include "KernelAccess/KernelAccess.h"
+#include <filesystem>
 
 class IProcessAccess
 {
 public:
+    virtual ~IProcessAccess() = default;
+
     virtual void ReadMemory(void* addr, SIZE_T len, std::vector<BYTE>& dataRead) = 0;
 
     virtual void WriteMemory(void* addr, const std::vector<BYTE>& data, SIZE_T& bytesWritten) = 0;
@@ -204,7 +207,7 @@ public:
 
     HandleProcessAccess(const HandleProcessAccess& another) = delete;
 
-    virtual ~HandleProcessAccess()
+    virtual ~HandleProcessAccess() override
     {
         CloseHandle(handle);
     }
@@ -236,33 +239,33 @@ public:
     virtual void ReadMemory(void* addr, SIZE_T len, std::vector<BYTE>& dataRead) override
     {
         // These api are designed to read small thunk of memory, so it won't matter if the length is a DWORD or QWORD. Again, this is NOT a project for production.
-        ka.ReadProcessMemory(pid, addr, (DWORD)len, dataRead);
+        ka->ReadProcessMemory(pid, addr, (DWORD)len, dataRead);
     }
 
     virtual void WriteMemory(void* addr, const std::vector<BYTE>& data, SIZE_T& bytesWritten) override
     {
-        bytesWritten = ka.WriteProcessMemory(pid, addr, data);
+        bytesWritten = ka->WriteProcessMemory(pid, addr, data);
     }
 
     virtual void* AllocateMemory(void* addr, SIZE_T len, DWORD protect) override
     {
-        return ka.AllocateRemoteMemory(pid, addr, (DWORD)len, protect);
+        return ka->AllocateRemoteMemory(pid, addr, (DWORD)len, protect);
     }
 
     virtual HANDLE CreateThread(void* addr, void* param, DWORD flag, DWORD& threadId) override
     {
-        threadId = ka.CreateRemoteThread(pid, addr, param, flag);
+        threadId = ka->CreateRemoteThread(pid, addr, param, flag);
         return NULL;
     }
 
     virtual void SetProcessInstrumentCallback(void* target) override
     {
         // TODO: prevent kernel handle leak
-        auto kernelHandle = ka.OpenProcess(GetProcessId(), PROCESS_ALL_ACCESS);
+        auto kernelHandle = ka->OpenProcess(GetProcessId(), PROCESS_ALL_ACCESS);
         PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION_64 info = {};
         info.Callback = (UINT64)target;
-        ka.SetInformationProcess(kernelHandle, ProcessInstrumentationCallback, std::vector((BYTE*)&info, (BYTE*)(&info + 1)));       
-        ka.CloseHandle(kernelHandle);
+        ka->SetInformationProcess(kernelHandle, ProcessInstrumentationCallback, std::vector((BYTE*)&info, (BYTE*)(&info + 1)));       
+        ka->CloseHandle(kernelHandle);
         return;
     }
 
@@ -284,7 +287,7 @@ public:
 
     void QueueUserAPC(PAPCFUNC pfnAPC, DWORD tid, ULONG_PTR dwData) override
     {
-        ka.QueueUserAPC(tid, pfnAPC, (void*)dwData, true);
+        ka->QueueUserAPC(tid, pfnAPC, (void*)dwData, true);
     }
 
     bool IsAPCReliable() override
@@ -295,11 +298,56 @@ public:
     KernelProcessAccess(DWORD pid)
     {
         this->pid = pid;
+        if (KernelAccess::IsKernelModuleReady())
+        {
+            ka = new KernelAccess();
+            Common::Print("[+] Kernel module opened.");
+        }
+        else
+        {
+            Common::Print("[!] Kernel module is not loaded, loading it now...");
+            auto kernel_module_path = (std::filesystem::current_path() / KERNEL_CORRIDOR_FILE_NAME).wstring();
+            if (!std::filesystem::is_regular_file(kernel_module_path))
+            {
+                Common::ThrowException("Kernel assistance module is not found, did you place KernelCorridor.sys under current directory?");
+            }
+            try
+            {
+                Common::InstallDriver(MYINJECTOR_KERNEL_SERVICE_NAME, kernel_module_path.c_str());
+                Common::StartDriver(MYINJECTOR_KERNEL_SERVICE_NAME);
+                new_kernel_service_created = true;
+                ka = new KernelAccess();
+                Common::Print("[+] Kernel module loaded.");
+            }
+            catch (std::exception e)
+            {
+                Common::StopDriver(MYINJECTOR_KERNEL_SERVICE_NAME);
+                Common::DeleteDriverService(MYINJECTOR_KERNEL_SERVICE_NAME);  
+                throw e;
+            }  
+        }
+    }
+
+    virtual ~KernelProcessAccess() override
+    {
+        if (ka)
+        {
+            delete ka;
+        }
+        if (new_kernel_service_created)
+        {
+            // delete creaetd service
+            Common::StopDriver(MYINJECTOR_KERNEL_SERVICE_NAME);
+            Common::DeleteDriverService(MYINJECTOR_KERNEL_SERVICE_NAME);
+        }
     }
 
 private:
     DWORD pid;
-    KernelAccess ka;
+    KernelAccess* ka;
+    bool new_kernel_service_created = false;
+    const wchar_t* MYINJECTOR_KERNEL_SERVICE_NAME = L"KMyInjector";
+    const wchar_t* KERNEL_CORRIDOR_FILE_NAME = L"KernelCorridor.sys";
 };
 
 class IEntryPoint

@@ -4,6 +4,10 @@
 class KernelAccess
 {
 public:
+    static bool IsKernelModuleReady();
+
+    static const wchar_t* GetKernelModuleSymbolicName();
+
     KernelAccess();
 
     KernelAccess(const KernelAccess& another) = delete;
