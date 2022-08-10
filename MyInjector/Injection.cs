@@ -64,11 +64,6 @@ namespace MyInjector.Injection
                 Name = "OpenProcess",
                 Description = "Get process handle by OpenProcess()."
             };
-            CandidateMethod ProcessAccess_StealToken = new CandidateMethod
-            {
-                Name = "Duplicate Handle",
-                Description = "Get process handle by duplicate a handle from another process."
-            };
             CandidateMethod ProcessAccess_Kernel = new CandidateMethod
             {
                 Name = "Kernel",
@@ -77,7 +72,7 @@ namespace MyInjector.Injection
             InjectionNode Node_ProcessAccess = new InjectionNode
             {
                 Name = "Process Access",
-                Candidates = new CandidateMethod[] { ProcessAccess_OpenProcess, ProcessAccess_StealToken, ProcessAccess_Kernel }
+                Candidates = new CandidateMethod[] { ProcessAccess_OpenProcess, ProcessAccess_Kernel }
             };
 
             CandidateMethod EntryPoint_LoadLibrary = new CandidateMethod

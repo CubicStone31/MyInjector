@@ -129,7 +129,7 @@ namespace MyInjector
             e.Handled = true;
         }
 
-        private readonly string dllPath_PlaceholderText = "Drag and drop your dll file here";
+        private readonly string dllPath_PlaceholderText = "[DLL file path here]";
         private readonly string processFilter_PlaceholderText = "Process Filter";
 
         private void TextBox_DllPath_GotFocus(object sender, RoutedEventArgs e)

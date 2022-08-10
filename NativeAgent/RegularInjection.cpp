@@ -223,12 +223,6 @@ public:
         return ret;
     }
 
-    static HANDLE GetHandleByDuplication(int pid)
-    {
-        Common::ThrowException("Not implemented.");
-        return 0;
-    }
-
 private:
     HANDLE handle = NULL;
     DWORD pid = 0;
@@ -1062,12 +1056,6 @@ void RegularInjectionMgr::DoInjection(int pid, const std::filesystem::path& dllP
         auto target_handle = HandleProcessAccess::GetHandleByOpenProcess(pid);
         access.reset(new HandleProcessAccess(target_handle, pid));
         Common::Print("[+] Process opened.");
-    }
-    else if (process_access_method == "Duplicate Handle")
-    {
-        auto target_handle = HandleProcessAccess::GetHandleByDuplication(pid);
-        access.reset(new HandleProcessAccess(target_handle, pid));
-        Common::Print("[+] Target handle get.");      
     }
     else if (process_access_method == "Kernel")
     {
