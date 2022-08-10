@@ -8,6 +8,7 @@
 #include <tlhelp32.h>
 #include "KernelAccess/KernelAccess.h"
 #include <filesystem>
+#include <fstream>
 
 class IProcessAccess
 {
@@ -260,6 +261,7 @@ public:
 
     virtual void SetProcessInstrumentCallback(void* target) override
     {
+        // Not exception safe, kernel handle will not be closed if exception happens
         // TODO: prevent kernel handle leak
         auto kernelHandle = ka->OpenProcess(GetProcessId(), PROCESS_ALL_ACCESS);
         PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION_64 info = {};
@@ -282,7 +284,6 @@ public:
     HANDLE OpenThread(DWORD threadId, DWORD access) override
     {
         throw std::exception("Not implemented");
-        return 0;
     }
 
     void QueueUserAPC(PAPCFUNC pfnAPC, DWORD tid, ULONG_PTR dwData) override
@@ -506,31 +507,261 @@ private:
 class ManualLoadEntryPoint : public IEntryPoint
 {
 public:
-    virtual bool Prepare()
+    virtual bool Prepare(const std::wstring& dllPath)
     {
-        return false;
+        Common::Print("[!] Please note that C++ Exception is not supported in this mode.");
+        // 1. parse headers and get section info
+        // 2. write sections
+        // 3. shellcode will handle the rest
+        auto filesize = std::filesystem::file_size(dllPath);
+        std::unique_ptr<uint8_t[]> file_buffer = std::make_unique<uint8_t[]>(filesize);
+        std::ifstream dll;
+        dll.open(dllPath, std::ios_base::binary);
+        if (!dll.is_open())
+        {
+            Common::ThrowException("cannot read file %ws", dllPath.c_str());
+        }
+        dll.read((char*)file_buffer.get(), filesize);
+        dll.close();
+        auto dos_header = (IMAGE_DOS_HEADER*)file_buffer.get();
+        auto nt_header = (IMAGE_NT_HEADERS*)(dos_header->e_lfanew + file_buffer.get());
+        auto optional_header = &nt_header->OptionalHeader;
+        auto file_header = &nt_header->FileHeader;
+        auto manual_mapped_base = access->AllocateMemory(0, optional_header->SizeOfImage, PAGE_EXECUTE_READWRITE);      
+        Common::Print("[+] The injected module will be mapped to 0x%p", manual_mapped_base);
+        // write header
+        SIZE_T written = 0;
+        // todo: check if filesize is less than 0x1000(highly unlikely)
+        access->WriteMemory(manual_mapped_base, std::vector<BYTE>((uint8_t*)dos_header, (uint8_t*)dos_header + 0x1000), written);
+        // write sections
+        auto image_section_header = IMAGE_FIRST_SECTION(nt_header);
+        for (int i = 0; i < file_header->NumberOfSections; i++, image_section_header++)
+        {
+            if (image_section_header->SizeOfRawData)
+            {
+                auto section_mapped_base = image_section_header->VirtualAddress + (uint8_t*)manual_mapped_base;
+                auto section_file_ptr = image_section_header->PointerToRawData + file_buffer.get();
+                auto section_len = image_section_header->SizeOfRawData;
+                access->WriteMemory(section_mapped_base, std::vector<BYTE>(section_file_ptr, section_file_ptr + section_len), written);
+                Common::Print("[+] Section %s mapped to 0x%p", image_section_header->Name, section_mapped_base);
+            }
+        }
+        // prepare shellcode param
+        ManualLoadShellcodeParam param;
+        param.module_base = (uint8_t*)manual_mapped_base;
+        // these addresses remain the same across processes
+        param.LoadLibraryA = LoadLibraryA;
+        param.GetProcAddress = GetProcAddress;
+#ifdef _WIN64
+        param.RtlAddFunctionTable = RtlAddFunctionTable;
+#endif
+        auto param_in_target = access->AllocateMemory(0, sizeof(param), PAGE_READWRITE);
+        access->WriteMemory(param_in_target, std::vector<BYTE>((uint8_t*)&param, (uint8_t*)(&param + 1)), written);
+        parameter = param_in_target;
+        Common::Print("[+] Shellcode param written to 0x%p", param_in_target);
+        // prepare shellcode
+        if ((SIZE_T)Shellcode >= (SIZE_T)ShellcodeEndMarker)
+        {
+            Common::ThrowException("Shellcode ending marker not working. Please check compiler setting and recompile this program");
+        }
+        auto shellcode_len = (SIZE_T)ShellcodeEndMarker - (SIZE_T)Shellcode;
+        auto shellcode_in_target = access->AllocateMemory(0, shellcode_len, PAGE_EXECUTE_READWRITE);
+        access->WriteMemory(shellcode_in_target, std::vector<BYTE>((uint8_t*)Shellcode, (uint8_t*)Shellcode + shellcode_len), written);
+        Common::Print("[+] Initialization shellcode written to 0x%p", shellcode_in_target);
+        entry_point = shellcode_in_target;
+        return true;
     }
 
     virtual void* GetEntryPoint() override
     {
-        return 0;
+        return entry_point;
     }
 
     virtual void* GetParameter() override
     {
-        return 0;
+        return parameter;
     }
 
     ManualLoadEntryPoint(IProcessAccess* access)
     {
         this->access = access;
-        Common::ThrowException("Not Implemented");
     }
 
 private:
+    using LoadLibraryAPtr = HMODULE(_stdcall*)(LPCSTR lpLibFileName);
+    using GetProcAddressPtr = FARPROC(_stdcall*)(HMODULE hModule, LPCSTR lpProcName);
+#ifdef _WIN64
+    using RtlAddFunctionTablePtr = BOOLEAN(_stdcall*)(PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount, DWORD64 BaseAddress);
+#endif
+    using DllMainFunc = BOOL(_stdcall*)(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved);
+
+    struct ManualLoadShellcodeParam
+    {
+        LoadLibraryAPtr LoadLibraryA = 0;
+        GetProcAddressPtr GetProcAddress = 0;
+#ifdef _WIN64
+        RtlAddFunctionTablePtr RtlAddFunctionTable = 0;
+#endif
+        uint8_t* module_base = 0;
+        // eight '=' characters to make memory view more friendly
+        const char special_marker[8] = { '=', '=', '=', '=', '=', '=', '=', '=' };
+        // shellcode has stopped running
+        bool shellcode_returned = false;
+#ifdef _WIN64
+        // function table successfully added
+        bool exception_ok = false;
+#endif
+        // no error before calling tls and dllmain
+        bool success_before_entrypoint = false;
+        // no error at the very end of the shellcode
+        bool shellcode_success = false;
+    };
+
     IProcessAccess* access = NULL;
     void* entry_point = NULL;
     void* parameter = NULL;
+
+    // try my best to get a working shellcode
+#pragma runtime_checks( "", off )
+#pragma optimize( "", off )  
+    // it will be copied directly to another process, dont use any function except for those provided in ManualLoadShellcodeParam
+    static __declspec(noinline) void __stdcall Shellcode(ManualLoadShellcodeParam* param)
+    {
+        auto module_base = param->module_base;
+        auto nt_header = (IMAGE_NT_HEADERS*)(((IMAGE_DOS_HEADER*)module_base)->e_lfanew + module_base);
+        auto optional_header = &nt_header->OptionalHeader;
+        auto DllMainPtr = (DllMainFunc)(module_base + optional_header->AddressOfEntryPoint);
+
+        // relocation
+        uint8_t* shifted_base = module_base - optional_header->ImageBase;
+        if (shifted_base && optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size)
+        {
+            auto reloc_table = (uint8_t*)(optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress + module_base);
+            auto reloc_table_end = reloc_table + optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
+            for (auto reloc_sub_table = (IMAGE_BASE_RELOCATION*)reloc_table; (uint8_t*)reloc_sub_table < reloc_table_end && reloc_sub_table->SizeOfBlock; reloc_sub_table = (IMAGE_BASE_RELOCATION*)((uint8_t*)reloc_sub_table + reloc_sub_table->SizeOfBlock))
+            {
+                uint32_t entry_count = (reloc_sub_table->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(uint16_t);
+                auto current_entry = (uint8_t*)(reloc_sub_table + 1);
+                for (int i = 0; i < entry_count; i++, current_entry += sizeof(uint16_t))
+                {
+                    bool need_code_fix = false;
+                    auto entry_value = *(uint16_t*)current_entry;
+#ifdef _WIN64
+                    // 64bit
+                    if (entry_value >> 0x0c == IMAGE_REL_BASED_DIR64)
+                    {
+                        need_code_fix = true;
+                    }
+#else
+                    // 32bit
+                    if (entry_value >> 0x0c == IMAGE_REL_BASED_HIGHLOW)
+                    {
+                        need_code_fix = true;
+                    }
+#endif
+                    if (need_code_fix)
+                    {
+                        auto code_addr = (uint8_t**)(module_base + reloc_sub_table->VirtualAddress + (entry_value & 0xFFF));
+                        *code_addr = (*code_addr) + (SIZE_T)(shifted_base);
+                    }
+                }
+            }
+        }
+
+        // import table
+        if (optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size)
+        {
+            auto import_desc = (IMAGE_IMPORT_DESCRIPTOR*)(module_base + optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+            for (; import_desc->Name; import_desc++)
+            {
+                auto dependency_module_name = (const char*)(import_desc->Name + module_base);
+                auto dependency_module_base = param->LoadLibraryA(dependency_module_name);
+                if (!dependency_module_base)
+                {
+                    //  todo: report error and stop
+                }
+
+                auto oiat_ptr = (size_t*)(import_desc->OriginalFirstThunk + module_base);
+                auto iat_ptr = (size_t*)(import_desc->FirstThunk + module_base);
+
+                auto current_oiat_entry = oiat_ptr;
+                auto current_iat_entry = iat_ptr;
+                for (; *current_oiat_entry; current_oiat_entry++, current_iat_entry++)
+                {
+                    auto oiat_value = *current_oiat_entry;
+                    if (IMAGE_SNAP_BY_ORDINAL(oiat_value))
+                    {
+                        *current_iat_entry = (size_t)param->GetProcAddress(dependency_module_base, (const char*)(oiat_value & 0xffff));
+                    }
+                    else
+                    {
+                        auto name_desc = (IMAGE_IMPORT_BY_NAME*)(module_base + oiat_value);
+                        *current_iat_entry = (size_t)param->GetProcAddress(dependency_module_base, name_desc->Name);
+                    }
+                    if (!*current_iat_entry)
+                    {
+                        //  todo: report error and stop
+                    }
+                }
+            }
+        }
+
+#ifdef _WIN64
+        // for win64, add function table for seh stack unwind support
+        if (optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size)
+        {
+            auto function_entry = (IMAGE_RUNTIME_FUNCTION_ENTRY*)(module_base + optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress);
+            auto count = optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size / sizeof(IMAGE_RUNTIME_FUNCTION_ENTRY);
+            if (param->RtlAddFunctionTable(function_entry, count, (uint64_t)module_base))
+            {
+                param->exception_ok = true;
+            }
+            else
+            {
+                param->exception_ok = false;
+            }
+        }
+#endif // _WIN64
+
+        param->success_before_entrypoint = true;
+
+        // call tls entry
+        if (optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size)
+        {
+            auto tls_directory = (IMAGE_TLS_DIRECTORY*)(module_base + optional_header->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+            auto callback_table = (PIMAGE_TLS_CALLBACK*)(tls_directory->AddressOfCallBacks);
+            if (callback_table)
+            {
+                for (auto current_callback = *callback_table; current_callback; current_callback = (PIMAGE_TLS_CALLBACK)((void**)current_callback + 1))
+                {
+                    current_callback(module_base, DLL_PROCESS_ATTACH, 0);
+                }
+            }
+        }
+
+        // finally, call dllmain
+        if (!DllMainPtr((HINSTANCE)module_base, DLL_PROCESS_ATTACH, 0))
+        {
+            // todo: unload itself if dllmain returned false;
+            // todo: report dllmain return value
+        }
+
+        param->shellcode_success = true;
+        param->shellcode_returned = true;
+    }
+
+    // marks the end of Shellcode above
+    static __declspec(noinline) void __stdcall  ShellcodeEndMarker()
+    {
+        // calling a function to avoid the code being optimized
+        // rest asured, it won't be executed
+        for (int i = 0; i < 10; i++)
+        {
+            LoadLibraryA((const char*)0xdeadbeef);
+        }
+    }
+#pragma runtime_checks( "", restore )
+#pragma optimize( "", restore )
 };
 
 class IExecuter
@@ -858,7 +1089,7 @@ void RegularInjectionMgr::DoInjection(int pid, const std::filesystem::path& dllP
     else if (entry_point_method == "Manual Load")
     {
         auto manualLoad = new ManualLoadEntryPoint(access.get());
-        manualLoad->Prepare();
+        manualLoad->Prepare(dllPath.wstring());
         entry.reset(manualLoad);
         Common::Print("[+] Entrypoint manual load successfully prepared.");
     }
