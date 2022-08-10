@@ -38,11 +38,6 @@ int main(int argc, char* argv[], char* envp[])
             SetWindowsHookInjectionMgr::DoInjection(pid, dllPath, methods);
             return 0;
         }
-        else if (major_method == "IME")
-        {
-            Common::Print("Not implemented.");
-            return -1;
-        }
     }
     catch (std::exception e)
     {

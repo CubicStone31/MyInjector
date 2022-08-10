@@ -134,15 +134,10 @@ namespace MyInjector.Injection
                 Description = "Injection using API SetWindowsHookEx().",
                 MinorNodes = null
             };
-            MajorMethod Major_IME = new MajorMethod
-            {
-                Name = "IME",
-                Description = "Injection using Windows Input Method Editor(IME)."
-            };
             _majorNode = new MajorNode
             {
                 Name = "Method",
-                Candidates = new CandidateMethod[] { Major_Common, Major_SetWindowHook, Major_IME }
+                Candidates = new CandidateMethod[] { Major_Common, Major_SetWindowHook }
             };
         }
 
