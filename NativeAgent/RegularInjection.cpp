@@ -509,7 +509,13 @@ class ManualLoadEntryPoint : public IEntryPoint
 public:
     virtual bool Prepare(const std::wstring& dllPath)
     {
+#ifdef _WIN64
         Common::Print("[!] Please note that C++ Exception is not supported in this mode.");
+#else
+        Common::Print("[!] Please note that SEH is not supported in this mode.");
+#endif // _WIN64
+        Common::Print("[!] Dependencies are loaded via LoadLibraryA, may cause trouble this way.");
+
         // 1. parse headers and get section info
         // 2. write sections
         // 3. shellcode will handle the rest
@@ -543,7 +549,7 @@ public:
                 auto section_file_ptr = image_section_header->PointerToRawData + file_buffer.get();
                 auto section_len = image_section_header->SizeOfRawData;
                 access->WriteMemory(section_mapped_base, std::vector<BYTE>(section_file_ptr, section_file_ptr + section_len), written);
-                Common::Print("[+] Section %s mapped to 0x%p", image_section_header->Name, section_mapped_base);
+                // Common::Print("[+] Section %s mapped to 0x%p", image_section_header->Name, section_mapped_base);
             }
         }
         // prepare shellcode param

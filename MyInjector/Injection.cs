@@ -195,6 +195,12 @@ namespace MyInjector.Injection
             // The PE header starts with "PE\0\0" =  0x50 0x45 0x00 0x00,
             // followed by a 2-byte machine type field (see the document above for the enum).
             //
+
+            // it seems that target path may be redirected/virtualized
+            // for example, if filepath is set to "c:\windows\system32\ntdll.dll", it will be redirected to "c:\windows\syswow64\ntdll.dll"
+            // it is UAC Virtualization or something like that but i cannot find a c# way to disable it.
+            // use PlatformTarget anycpu and uncheck 32bitpreferred to work around.
+
             FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
             BinaryReader br = new BinaryReader(fs);
             fs.Seek(0x3c, SeekOrigin.Begin);
