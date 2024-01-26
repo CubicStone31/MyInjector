@@ -63,25 +63,6 @@ namespace Common
     /// <param name="winVer">out: 10 for windows 10, 8 for win8 and 7 for win7. Any other version will be 0</param>
     inline void GetWindowsVersion(DWORD& winVer)
     {
-        //winVer = 0;
-        //if (IsWindows10OrGreater())
-        //{
-        //    winVer = 10;
-        //    return;
-        //}
-        //if (IsWindows8OrGreater())
-        //{
-        //    winVer = 8;
-        //    return;
-        //}
-        //if (IsWindows7OrGreater())
-        //{
-        //    winVer = 7; 
-        //    return;
-        //}
-        //return;
-        // IsWindowsXXXOrGreater() is not reliable, fuck it.
-
         using RtlGetVersionFunc =  NTSTATUS(WINAPI*)(PRTL_OSVERSIONINFOW);
         RtlGetVersionFunc func = (RtlGetVersionFunc)GetProcAddress(GetModuleHandleW(L"NTDLL"), "RtlGetVersion");
         RTL_OSVERSIONINFOW version = {};

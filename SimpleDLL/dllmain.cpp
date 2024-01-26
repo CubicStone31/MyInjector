@@ -2,6 +2,18 @@
 #include <windows.h>
 #include <exception>
 
+void CppExceptionTest()
+{
+    try
+    {
+        throw std::exception("really?");
+    }
+    catch (std::exception e)
+    {
+        MessageBoxA(0, "c++ exception ok.", "Exception Test", MB_OK | MB_TOPMOST);
+    }
+}
+
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
                        LPVOID lpReserved
@@ -18,20 +30,21 @@ BOOL APIENTRY DllMain( HMODULE hModule,
             wsprintfW(dll, L"Dll path not available, base 0x%p", (void*)hModule);
         }
         MessageBoxW(0, dll, process, MB_OK | MB_TOPMOST);
-        //__try
-        //{
-        //    char* data = 0;
-        //    data[0] = 1;
-        //}
-        //__except (EXCEPTION_EXECUTE_HANDLER)
-        //{
-        //    MessageBoxA(0, "SEH is good.", "Exception Test", MB_OK | MB_TOPMOST);
-        //}
+        __try
+        {
+            char* data = 0;
+            data[0] = 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            MessageBoxA(0, "SEH is good.", "Exception Test", MB_OK | MB_TOPMOST);
+        }
+        // CppExceptionTest();
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
     case DLL_PROCESS_DETACH:
         break;
     }
-    return TRUE;
+    return true;
 }
 

@@ -260,7 +260,7 @@ public:
         auto kernelHandle = ka->OpenProcess(GetProcessId(), PROCESS_ALL_ACCESS);
         PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION_64 info = {};
         info.Callback = (UINT64)target;
-        ka->SetInformationProcess(kernelHandle, ProcessInstrumentationCallback, std::vector((BYTE*)&info, (BYTE*)(&info + 1)));       
+        ka->SetInformationProcess(kernelHandle, ProcessInstrumentationCallback, std::vector((BYTE*)&info, (BYTE*)(&info + 1)));   
         ka->CloseHandle(kernelHandle);
         return;
     }
@@ -329,11 +329,21 @@ public:
         {
             delete ka;
         }
-        if (new_kernel_service_created)
+        // never throw an exception out of a deconstructor
+        try
         {
-            // delete creaetd service
-            Common::StopDriver(MYINJECTOR_KERNEL_SERVICE_NAME);
-            Common::DeleteDriverService(MYINJECTOR_KERNEL_SERVICE_NAME);
+            if (new_kernel_service_created)
+            {
+                // delete creaetd service
+                Common::StopDriver(MYINJECTOR_KERNEL_SERVICE_NAME);
+                Common::DeleteDriverService(MYINJECTOR_KERNEL_SERVICE_NAME);
+            }
+        }
+        catch (std::exception e)
+        {
+            Common::Print("[!] Failed to stop or delete the kernel service, please handle it mannually.");
+            Common::Print("[!] However the injection maybe still succeeded.");
+            Common::Print("[!] %s", e.what());
         }
     }
 
