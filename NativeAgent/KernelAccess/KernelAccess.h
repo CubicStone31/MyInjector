@@ -1,12 +1,10 @@
-#include "interface.h"
+#include <windows.h>
 #include <vector>
 
 class KernelAccess
 {
 public:
     static bool IsKernelModuleReady();
-
-    static const wchar_t* GetKernelModuleSymbolicName();
 
     KernelAccess();
 
@@ -61,7 +59,4 @@ public:
     DWORD CreateRemoteThread(DWORD pid, void* addr, void* param, DWORD flag);
 
     void QueueUserAPC(DWORD tid, void* addr, void* param, bool forceExecute);
-
-private:
-    HANDLE driverHandle = NULL;
 };

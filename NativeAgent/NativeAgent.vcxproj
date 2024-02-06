@@ -159,6 +159,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="KernelAccess\KC_usermode.cpp" />
     <ClCompile Include="KernelAccess\KernelAccess.cpp" />
     <ClCompile Include="NativeAgent.cpp" />
     <ClCompile Include="RegularInjection.cpp" />
@@ -167,6 +168,7 @@
   <ItemGroup>
     <ClInclude Include="Common.h" />
     <ClInclude Include="KernelAccess\interface.h" />
+    <ClInclude Include="KernelAccess\KC_usermode.h" />
     <ClInclude Include="KernelAccess\KernelAccess.h" />
     <ClInclude Include="RegularInjection.h" />
     <ClInclude Include="SetWindowHookInjection.h" />

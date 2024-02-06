@@ -1,7 +1,7 @@
 // When used in kernel development
 // #include <ntifs.h>
 // When used in application development
-#include <windows.h>
+// #include <windows.h>
 
 #define CTL_CODE( DeviceType, Function, Method, Access ) (                 \
     ((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method) \
@@ -26,14 +26,15 @@
 #define CC_CLEAR_DRIVER_TRACE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80B, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_ALLOC_PROCESS_MEM ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80C, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_QUEUE_USER_APC ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80D, METHOD_BUFFERED, FILE_READ_DATA))
-
-// API interfaces
 #define CC_OPEN_PROCESS ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80E, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_CLOSE_HANDLE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80F, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_SET_INFORMATION_PROCESS ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x810, METHOD_BUFFERED, FILE_READ_DATA))
+#define CC_GET_PROCESS_MODULE_BASE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x811, METHOD_BUFFERED, FILE_READ_DATA))
+#define CC_GET_THREAD_CONTEXT ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x812, METHOD_BUFFERED, FILE_READ_DATA))
+#define CC_SET_THREAD_CONTEXT ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x813, METHOD_BUFFERED, FILE_READ_DATA))
 
-#define KC_DEVICE_NAME L"\\Device\\KernelCorridor"
-#define KC_SYMBOLIC_NAME L"\\??\\KernelCorridor"
+#define KC_DEVICE_NAME L"\\Device\\KernelCorridor-1.1"
+#define KC_SYMBOLIC_NAME L"\\??\\KernelCorridor-1.1"
 
 #pragma pack(push)
 #pragma pack(8)
@@ -72,6 +73,14 @@ namespace KCProtocols
     struct RESPONSE_WRITE_PROCESS_MEM
     {
         UINT32 bytesWritten;
+    };
+
+    // Implementing a universal protocol header of 256 bytes. 
+    // This design will favor compatibility as it caters for any variations in future protocols. 
+    // Whether there's an addition or subtraction of fields in future protocols, this header will guarantee sufficient length, given that each protocol is less than 256 bytes.
+    struct GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT
+    {
+        UINT8 data[256];
     };
 
     struct REQUEST_CREATE_USER_THREAD
@@ -159,6 +168,7 @@ namespace KCProtocols
     struct RESPONSE_ALLOC_PROCESS_MEM
     {
         UINT64 base;
+        UINT32 size;
     };
 
     struct REQUEST_QUEUE_USER_APC
@@ -179,16 +189,17 @@ namespace KCProtocols
     {
         UINT32 pid;
         UINT32 access;
+        UINT8 request_user_mode_handle;
     };
 
     struct RESPONSE_OPEN_PROCESS
     {
-        UINT64 kernelModeHandle;
+        UINT64 handle;
     };
 
     struct REQUEST_CLOSE_HANDLE
     {
-        UINT64 kernelModeHandle;
+        UINT64 handle;
     };
 
     struct RESPONSE_CLOSE_HANDLE
@@ -198,7 +209,7 @@ namespace KCProtocols
 
     struct REQUEST_SET_INFORMATION_PROCESS
     {
-        UINT64 kernelModeHandle;
+        UINT64 handle;
         UINT32 processInformationClass;
         UINT32 processInformationLength;
         UINT8 processInformation[0];
@@ -208,7 +219,32 @@ namespace KCProtocols
     {
         UINT64 reserved;
     };
+
+    struct REQUEST_GET_PROCESS_MODULE_BASE
+    {
+        UINT32 pid;
+        wchar_t module_name[256];
+    };
+
+    struct RESPONSE_GET_PROCESS_MODULE_BASE
+    {
+        UINT64 base;
+    };
+
+    // no response structure
+    struct REQUEST_SET_THREAD_CONTEXT
+    {
+        UINT32 tid;
+        CONTEXT* ctx;
+    };
+
+    struct REQUEST_GET_THREAD_CONTEXT
+    {
+        UINT32 tid;
+        CONTEXT* ctx;
+    };
 }
+
 
 #pragma pack(pop)
 

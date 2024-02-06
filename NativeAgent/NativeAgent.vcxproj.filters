@@ -30,6 +30,9 @@
     <ClCompile Include="KernelAccess\KernelAccess.cpp">
       <Filter>kernel</Filter>
     </ClCompile>
+    <ClCompile Include="KernelAccess\KC_usermode.cpp">
+      <Filter>kernel</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RegularInjection.h">
@@ -48,6 +51,9 @@
       <Filter>kernel</Filter>
     </ClInclude>
     <ClInclude Include="KernelAccess\KernelAccess.h">
+      <Filter>kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="KernelAccess\KC_usermode.h">
       <Filter>kernel</Filter>
     </ClInclude>
   </ItemGroup>
