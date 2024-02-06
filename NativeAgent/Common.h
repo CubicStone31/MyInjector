@@ -201,7 +201,21 @@ namespace Common
         }
         if (svcStatus.dwCurrentState != SERVICE_STOPPED)
         {
-            ThrowException("Target service is not stopped.");
+            if (svcStatus.dwCurrentState != SERVICE_STOP_PENDING)
+            {
+                ThrowException("Target service is not stopped, status %d\n", svcStatus.dwCurrentState);
+            }
+            Sleep(2000);
+            SERVICE_STATUS_PROCESS status = {};
+            DWORD bytesNeeded = 0;
+            if (!QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO, (BYTE*)&status, sizeof(status), &bytesNeeded))
+            {
+                ThrowException("QueryServiceStatusEx() failed with last error %d.", GetLastError());
+            }          
+            if (status.dwCurrentState != SERVICE_STOPPED)
+            {
+                ThrowException("Target service is not stopped even after 2 seconds, status %d\n", status.dwCurrentState);
+            }
         }
     }
 

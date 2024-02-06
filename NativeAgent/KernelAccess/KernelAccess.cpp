@@ -22,7 +22,7 @@ KernelAccess::KernelAccess()
 
 KernelAccess::~KernelAccess()
 {
-    ;
+    KernelCorridor::Close();
 }
 
 void* KernelAccess::AllocateRemoteMemory(DWORD pid, void* addr, DWORD length, DWORD protect)
