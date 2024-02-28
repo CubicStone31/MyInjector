@@ -109,7 +109,7 @@ public:
     {
         dataRead.clear();
         SIZE_T bytesRead = 0;
-        std::unique_ptr<BYTE> buffer = std::make_unique<BYTE>(len);
+        auto buffer = std::make_unique<BYTE[]>(len);
         if (!ReadProcessMemory(handle, addr, buffer.get(), len, &bytesRead))
         {
             Common::ThrowException("ReadProcessMemory() failed with %d.", GetLastError());
@@ -260,7 +260,8 @@ public:
         auto kernelHandle = ka->OpenProcess(GetProcessId(), PROCESS_ALL_ACCESS);
         PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION_64 info = {};
         info.Callback = (UINT64)target;
-        ka->SetInformationProcess(kernelHandle, ProcessInstrumentationCallback, std::vector((BYTE*)&info, (BYTE*)(&info + 1)));   
+        std::vector<uint8_t> temp((uint8_t*)&info, (uint8_t*)(&info + 1));
+        ka->SetInformationProcess(kernelHandle, ProcessInstrumentationCallback, temp);
         ka->CloseHandle(kernelHandle);
         return;
     }

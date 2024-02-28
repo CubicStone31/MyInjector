@@ -135,7 +135,6 @@ namespace Common
         }
 
         if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
-
         {
             return FALSE;
         }

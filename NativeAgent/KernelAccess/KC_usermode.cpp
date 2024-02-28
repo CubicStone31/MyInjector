@@ -215,9 +215,11 @@ bool KernelCorridor::WriteProcessMemory(uint32_t pid, uint64_t address_to_write,
     DWORD bytesReturned = 0;
     if (!DeviceIoControl(G_Driver, CC_WRITE_PROCESS_MEM, request, sizeof(KCProtocols::REQUEST_WRITE_PROCESS_MEM) + data.size(), &response, sizeof(response), &bytesReturned, 0))
     {
+        free(request);
         return false;
     }
     bytes_written = response.bytesWritten;
+    free(request);
     return true;
 }
 
@@ -232,9 +234,11 @@ bool KernelCorridor::ReadProcessMemory(uint32_t pid, uint64_t address_to_read, u
     DWORD bytesReturned = 0;
     if (!DeviceIoControl(G_Driver, CC_READ_PROCESS_MEM, &request, sizeof(request), response, sizeof(KCProtocols::RESPONSE_READ_PROCESS_MEM) + length_to_read, &bytesReturned, 0))
     {
+        free(response);
         return false;
     }
     out = { response->data, response->data + response->size };
+    free(response);
     return true;
 }
 
@@ -333,7 +337,7 @@ bool KernelCorridor::KCCloseHandle(HANDLE handle)
 bool KernelCorridor::SetInformationProcess(uint64_t handle, uint32_t process_info_class, const std::vector<uint8_t>& data)
 {
     auto requestSize = sizeof(KCProtocols::REQUEST_SET_INFORMATION_PROCESS) + data.size();
-    auto buffer = std::make_unique<uint8_t>(requestSize);
+    auto buffer = std::make_unique<uint8_t[]>(requestSize);
     auto request = (KCProtocols::REQUEST_SET_INFORMATION_PROCESS*)buffer.get();
     request->handle = handle;
     request->processInformationClass = process_info_class;
